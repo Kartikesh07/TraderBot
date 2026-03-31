@@ -315,12 +315,21 @@ async def dashboard_loop(state: SharedState, trader: PaperTrader):
     """
     Renders the Rich dashboard to the terminal.
     
-    Uses Rich's Live context for smooth in-place updates
-    every 500ms. Before starting, we remove the RichHandler
-    from the root logger so log messages don't scroll the
-    terminal — instead, important events are shown inside
-    the dashboard via the shared event_log deque.
+    On interactive terminals: Uses Rich's Live context for in-place updates.
+    On non-interactive terminals (Render/Docker): Skips Rich rendering
+    entirely and lets the web dashboard at / handle display instead.
     """
+    # On Render / Docker, stdout is not a TTY — skip Rich Live
+    if not sys.stdout.isatty():
+        logger.info("📺 Terminal is non-interactive (Render/Docker) — "
+                    "use web dashboard at / instead")
+        # Just keep this task alive so asyncio.wait doesn't exit
+        try:
+            while True:
+                await asyncio.sleep(60)
+        except asyncio.CancelledError:
+            return
+
     logger.info("📺 Dashboard starting in 3 seconds...")
     await asyncio.sleep(3)
 
@@ -405,8 +414,8 @@ async def main():
     state = SharedState()
     trader = PaperTrader()
 
-    # ── Set up health server references ──
-    set_references(state, trader)
+    # ── Set up health server references (include event_log for web dashboard) ──
+    set_references(state, trader, event_log)
 
     # ── Start health server (for Render deployment) ──
     await start_health_server()
